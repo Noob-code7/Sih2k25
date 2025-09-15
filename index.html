@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Hazard Reporting Platform</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Replaced tab-based navigation with landing page featuring card grid layout -->
+    <!-- Main Landing Page -->
+    <div id="landingPage" class="landing-page">
+        <!-- Header with login button -->
+        <header class="landing-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-water"></i>
+                    <span>Ocean Hazard Platform</span>
+                </div>
+                <div class="user-info">
+                    <span id="userRoleDisplay" style="display: none;"></span>
+                    <button id="loginBtn" class="login-btn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        <span>Login</span>
+                    </button>
+                    <button id="logoutBtn" class="logout-btn" style="display: none;">
+                        <i class=\"fas fa-sign-out-alt\"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="landing-main">
+            <!-- Hero Section -->
+            <section class="hero-section">
+                <h1>Report and Access Critical Safety Information</h1>
+                <button id="startReportingBtn" class="start-reporting-btn">
+                    Start Reporting
+                </button>
+            </section>
+
+            <!-- Feature Cards Grid -->
+            <section class="features-grid">
+                <div class="feature-card" data-feature="heatmap">
+                    <div class="feature-icon">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </div>
+                    <h3>Interactive Heatmap</h3>
+                    <p>View real-time hazard reports on an interactive map with severity indicators</p>
+                </div>
+
+                <div class="feature-card" data-feature="reports">
+                    <div class="feature-icon">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                    <h3>Photo & Video Reports</h3>
+                    <p>Upload visual evidence with automatic location tagging and hazard detection</p>
+                </div>
+
+                <div class="feature-card" data-feature="social">
+                    <div class="feature-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3>Social Media Integration</h3>
+                    <p>Track location-based social media posts to identify emerging hazards</p>
+                </div>
+
+                <div class="feature-card" data-feature="emergency">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3>Emergency Information</h3>
+                    <p>Access critical safety resources and emergency contact information</p>
+                </div>
+
+                <div class="feature-card" data-feature="ai">
+                    <div class="feature-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3>AI-Powered Detection</h3>
+                    <p>Advanced AI analyzes reports to automatically categorize hazard types</p>
+                </div>
+
+                <div class="feature-card" data-feature="community">
+                    <div class="feature-icon">
+                        <i class="fas fa-water"></i>
+                    </div>
+                    <h3>Community Driven</h3>
+                    <p>Join thousands of ocean safety advocates protecting our coastlines</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Moved detailed screens to separate sections that can be accessed after login -->
+    <!-- Map Screen (hidden by default) -->
+    <div id="mapScreen" class="content-screen" style="display: none;">
+        <header class="screen-header">
+            <button id="backToLanding" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back
+            </button>
+            <h2>Ocean Hazard Heat Map</h2>
+            <div class="map-controls">
+                <button id="reportHazardBtn" class="primary-btn">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Report Hazard
+                </button>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color green"></div>
+                        <span>Safe</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color yellow"></div>
+                        <span>Caution</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color red"></div>
+                        <span>Danger</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <div id="map" class="map-container"></div>
+    </div>
+
+    <!-- Social Media Screen (hidden by default) -->
+    <div id="socialScreen" class="content-screen" style="display: none;">
+        <header class="screen-header">
+            <button id="backToLandingSocial" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back
+            </button>
+            <h2>Social Media Feed</h2>
+            <div class="social-controls">
+                <input type="text" id="locationFilter" placeholder="Filter by location...">
+                <select id="platformFilter">
+                    <option value="all">All Platforms</option>
+                    <option value="twitter">Twitter</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="facebook">Facebook</option>
+                </select>
+            </div>
+        </header>
+        <div class="social-feed" id="socialFeed">
+            <!-- Social media posts will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Help/Emergency Screen (accessible without login) -->
+    <div id="helpScreen" class="content-screen" style="display: none;">
+        <header class="screen-header">
+            <button id="backToLandingHelp" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back
+            </button>
+            <h2>Emergency Contacts & Help</h2>
+        </header>
+        <div class="help-content">
+            <div class="emergency-section">
+                <h3><i class="fas fa-phone-alt"></i> Emergency Contacts</h3>
+                <div class="contact-grid">
+                    <div class="contact-card urgent">
+                        <h4>Coast Guard Emergency</h4>
+                        <p class="phone">📞 +1-800-USCG-911</p>
+                        <p class="description">24/7 maritime emergencies</p>
+                    </div>
+                    <div class="contact-card urgent">
+                        <h4>Local Emergency Services</h4>
+                        <p class="phone">📞 911</p>
+                        <p class="description">Police, Fire, Medical</p>
+                    </div>
+                    <div class="contact-card">
+                        <h4>NOAA Weather Service</h4>
+                        <p class="phone">📞 +1-301-713-1677</p>
+                        <p class="email">✉️ info@weather.gov</p>
+                    </div>
+                    <div class="contact-card">
+                        <h4>Marine Safety Office</h4>
+                        <p class="phone">📞 +1-555-MARINE</p>
+                        <p class="email">✉️ safety@marine.gov</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="resources-section">
+                <h3><i class="fas fa-life-ring"></i> Safety Resources</h3>
+                <div class="resource-list">
+                    <div class="resource-item">
+                        <h4>Ocean Safety Guidelines</h4>
+                        <p>Essential safety tips for ocean activities</p>
+                        <a href="#" class="resource-link">View Guidelines</a>
+                    </div>
+                    <div class="resource-item">
+                        <h4>Weather Alerts</h4>
+                        <p>Current weather warnings and advisories</p>
+                        <a href="#" class="resource-link">Check Alerts</a>
+                    </div>
+                    <div class="resource-item">
+                        <h4>Reporting Guidelines</h4>
+                        <p>How to effectively report ocean hazards</p>
+                        <a href="#" class="resource-link">Learn More</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-water"></i> Login Required</h3>
+                <button class="close-btn" id="closeLoginModal">&times;</button>
+            </div>
+            <p class="login-message">Please log in to access this feature</p>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="userRole">Role</label>
+                    <select id="userRole" required>
+                        <option value="">Select your role</option>
+                        <option value="citizen">Citizen</option>
+                        <option value="official">Government Official</option>
+                        <option value="analyst">Data Analyst</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelLogin">Cancel</button>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Sign In
+                    </button>
+                </div>
+            </form>
+            <div class="login-footer">
+                <p>Don't have an account? <a href="#" id="registerLink">Register here</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Hazard Modal -->
+    <div id="reportModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Report Ocean Hazard</h3>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+            <form id="hazardForm" class="hazard-form">
+                <div class="form-group">
+                    <label for="hazardType">Hazard Type</label>
+                    <select id="hazardType" required>
+                        <option value="">Select hazard type</option>
+                        <option value="rip-current">Rip Current</option>
+                        <option value="high-waves">High Waves</option>
+                        <option value="debris">Marine Debris</option>
+                        <option value="pollution">Water Pollution</option>
+                        <option value="wildlife">Dangerous Wildlife</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" rows="3" placeholder="Describe the hazard..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="severity">Severity Level</label>
+                    <select id="severity" required>
+                        <option value="">Select severity</option>
+                        <option value="low">Low - Minor concern</option>
+                        <option value="medium">Medium - Moderate risk</option>
+                        <option value="high">High - Immediate danger</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mediaUpload">Upload Photo/Video</label>
+                    <input type="file" id="mediaUpload" accept="image/*,video/*">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelReport">Cancel</button>
+                    <button type="submit" class="submit-btn">Submit Report</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
