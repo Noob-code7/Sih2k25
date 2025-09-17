@@ -9,7 +9,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Replaced tab-based navigation with landing page featuring card grid layout -->
+    
     <!-- Main Landing Page -->
     <div id="landingPage" class="landing-page">
         <!-- Header with login button -->
@@ -44,13 +44,13 @@
 
             <!-- Feature Cards Grid -->
             <section class="features-grid">
-                <div class="feature-card" data-feature="heatmap">
+                <a class="feature-card" href="map.html">
                     <div class="feature-icon">
                         <i class="fas fa-map-marker-alt"></i>
                     </div>
-                    <h3>Interactive Heatmap</h3>
-                    <p>View real-time hazard reports on an interactive map with severity indicators</p>
-                </div>
+                    <h3>HeatMap</h3>
+                    <p>Open the dedicated map page with live hazards</p>
+                </a>
 
                 <div class="feature-card" data-feature="reports">
                     <div class="feature-icon">
@@ -94,8 +94,14 @@
             </section>
         </main>
     </div>
+    
+    <!-- Uploader Section (glass gradient background, scrollable with page) -->
+    <section class="glass-section">
+        <div class="glass-container">
+            <div id="hazardUploadMount"></div>
+        </div>
+    </section>
 
-    <!-- Moved detailed screens to separate sections that can be accessed after login -->
     <!-- Map Screen (hidden by default) -->
     <div id="mapScreen" class="content-screen" style="display: none;">
         <header class="screen-header">
@@ -218,6 +224,7 @@
                 <button class="close-btn" id="closeLoginModal">&times;</button>
             </div>
             <p class="login-message">Please log in to access this feature</p>
+            <div id="loginError" class="form-error" style="display:none;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:8px 10px;border-radius:6px;margin:8px 0;"></div>
             <form id="loginForm" class="login-form">
                 <div class="form-group">
                     <label for="email">Email</label>
@@ -296,6 +303,10 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- exif-js for reading EXIF GPS -->
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+    <!-- Hazard upload (vanilla JS, Firebase v9 via CDN). Replace Firebase config in hazard-upload.js -->
+    <script type="module" src="hazard-upload.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
