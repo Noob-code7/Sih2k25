@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Hazard Social Feed</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .hashtag {
+            color: #1d4ed8;
+            font-weight: 600;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .post-card {
+            transition: all 0.3s ease;
+        }
+        .post-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-blue-900 text-white py-6 shadow-lg">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold flex items-center">
+                        <i class="fas fa-wave-square mr-3"></i>
+                        Live Social Media Feed: Ocean Hazards
+                    </h1>
+                    <p class="text-blue-200 mt-2">Real-time posts about ocean disasters and hazards</p>
+                </div>
+                <button onclick="window.history.back()" class="bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Location Status -->
+    <div class="container mx-auto px-4 py-4">
+        <div id="locationStatus" class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-lg mb-6 hidden">
+            <div class="flex items-center">
+                <i class="fas fa-map-marker-alt mr-2"></i>
+                <span id="locationText">Requesting location access...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 pb-8">
+        <!-- Hashtag Filter Info -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-3">
+                <i class="fas fa-hashtag mr-2 text-blue-600"></i>Monitoring Keywords & Hashtags
+            </h2>
+            <div class="flex flex-wrap gap-2">
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#Tsunami</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#TsunamiAlert</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#Hurricane</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#Cyclone</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#StormSurge</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#CoastalFlooding</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#OceanHazard</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#MarineHazard</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#OilSpill</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#SeaLevelRise</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#CoastalErosion</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#Typhoon</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#FloodWarning</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#TidalWave</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#MarineDisaster</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#BeachErosion</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#HighTide</span>
+                <span class="hashtag bg-blue-100 px-3 py-1 rounded-full text-sm">#OceanWarning</span>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="text-center py-12 hidden">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p class="text-gray-600">Loading social media posts...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-center hidden">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            <span id="errorMessage">Unable to load social media feed</span>
+        </div>
+
+        <!-- No Posts State -->
+        <div id="noPostsState" class="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-8 rounded-lg text-center hidden">
+            <i class="fas fa-search mr-2 text-2xl mb-4 block"></i>
+            <p class="text-lg">No posts found in your area</p>
+            <p class="text-sm mt-2">Try checking back later or expanding your search radius</p>
+        </div>
+
+        <!-- Posts Feed -->
+        <div id="postsContainer" class="space-y-6">
+            <!-- Posts will be dynamically loaded here -->
+        </div>
+
+        <!-- Refresh Button -->
+        <div class="text-center mt-8">
+            <button id="refreshBtn" onclick="refreshFeed()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh Feed
+            </button>
+        </div>
+    </main>
+
+    <script src="/social-page.js"></script>
+</body>
+</html>

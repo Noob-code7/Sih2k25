@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        html, body { height: 100%; margin: 0; }
+        #map { height: 100%; width: 100%; }
+    </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="generator.js"></script>
+    <script src="map.js"></script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Hazard Heat Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="mapScreen" class="content-screen" style="display: block;">
+        <header class="screen-header">
+            <a href="index.html" class="back-btn" style="text-decoration:none;">
+                <i class="fas fa-arrow-left"></i>
+                Back
+            </a>
+            <h2>Ocean Hazard Heat Map</h2>
+            <div class="map-controls">
+                <label for="disasterFilter" style="font-weight:600; color:#4a5568;">Disaster</label>
+                <select id="disasterFilter">
+                    <option value="all">All</option>
+                    <option value="rip-current">Rip Current</option>
+                    <option value="high-waves">High Waves</option>
+                    <option value="debris">Marine Debris</option>
+                    <option value="pollution">Water Pollution</option>
+                    <option value="wildlife">Dangerous Wildlife</option>
+                    <option value="other">Other</option>
+                </select>
+
+                <label for="heatToggle" style="display:flex; align-items:center; gap:8px; color:#4a5568;">
+                    <input type="checkbox" id="heatToggle" checked>
+                    Heatmap
+                </label>
+                <button id="reportHazardBtn" class="primary-btn">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Report Hazard
+                </button>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color green"></div>
+                        <span>Safe</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color yellow"></div>
+                        <span>Caution</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color red"></div>
+                        <span>Danger</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <div id="map" class="map-container"></div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-water"></i> Login Required</h3>
+                <button class="close-btn" id="closeLoginModal">&times;</button>
+            </div>
+            <p class="login-message">Please log in to access this feature</p>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="userRole">Role</label>
+                    <select id="userRole" required>
+                        <option value="">Select your role</option>
+                        <option value="citizen">Citizen</option>
+                        <option value="official">Government Official</option>
+                        <option value="analyst">Data Analyst</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelLogin">Cancel</button>
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Sign In
+                    </button>
+                </div>
+            </form>
+            <div class="login-footer">
+                <p>Don't have an account? <a href="#" id="registerLink">Register here</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Hazard Modal -->
+    <div id="reportModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Report Ocean Hazard</h3>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+            <form id="hazardForm" class="hazard-form">
+                <div class="form-group">
+                    <label for="hazardType">Hazard Type</label>
+                    <select id="hazardType" required>
+                        <option value="">Select hazard type</option>
+                        <option value="rip-current">Rip Current</option>
+                        <option value="high-waves">High Waves</option>
+                        <option value="debris">Marine Debris</option>
+                        <option value="pollution">Water Pollution</option>
+                        <option value="wildlife">Dangerous Wildlife</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" rows="3" placeholder="Describe the hazard..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="severity">Severity Level</label>
+                    <select id="severity" required>
+                        <option value="">Select severity</option>
+                        <option value="low">Low - Minor concern</option>
+                        <option value="medium">Medium - Moderate risk</option>
+                        <option value="high">High - Immediate danger</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mediaUpload">Upload Photo/Video</label>
+                    <input type="file" id="mediaUpload" accept="image/*,video/*">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelReport">Cancel</button>
+                    <button type="submit" class="submit-btn">Submit Report</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <script src="map.js"></script>
+    <script src="generator.js"></script>
+</body>
+</html>
+
+
