@@ -26,6 +26,9 @@ const loginForm = document.getElementById("loginForm")
 const closeLoginModal = document.getElementById("closeLoginModal")
 const cancelLogin = document.getElementById("cancelLogin")
 
+// Feature flags
+const USE_NODE_AUTH = false
+
 // Leaflet library
 const L = window.L
 
@@ -39,6 +42,10 @@ function initializeApp() {
   if (savedUser) {
     currentUser = JSON.parse(savedUser)
     updateAuthUI()
+  }
+  // Try to hydrate from server session only if enabled
+  if (USE_NODE_AUTH) {
+    syncUserFromServer()
   }
 
   // Event Listeners
@@ -104,10 +111,9 @@ function handleFeatureCardClick(feature) {
       }
       break
     case "social":
-      if (requireAuth(() => showScreen("socialScreen"))) {
-        showScreen("socialScreen")
-        loadSocialFeed()
-      }
+      // Social feed does not require login; request location and load
+      showScreen("socialScreen")
+      loadSocialFeed()
       break
     case "emergency":
       showScreen("helpScreen") // Emergency info doesn't require auth
@@ -161,35 +167,80 @@ function handleLogin(e) {
   const email = document.getElementById("email").value
   const password = document.getElementById("password").value
   const role = document.getElementById("userRole").value
+  const errorBox = document.getElementById("loginError")
 
-  // Simple validation (in real app, this would be server-side)
-  if (email && password && role) {
-    currentUser = {
-      email: email,
-      role: role,
-      loginTime: new Date().toISOString(),
-    }
-
-    localStorage.setItem("currentUser", JSON.stringify(currentUser))
-    updateAuthUI()
-    hideModal(loginModal)
-
-    if (pendingAction) {
-      pendingAction()
-      pendingAction = null
-    }
-
-    loginForm.reset()
-  } else {
-    alert("Please fill in all fields")
+  const errors = []
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!email || !emailRegex.test(email)) {
+    errors.push("Enter a valid email address")
   }
+  if (!password || password.length < 6) {
+    errors.push("Password must be at least 6 characters")
+  }
+  if (!role) {
+    errors.push("Please select your role")
+  }
+
+  if (errors.length) {
+    if (errorBox) {
+      errorBox.innerHTML = errors.map((e) => `<div>• ${e}</div>`).join("")
+      errorBox.style.display = "block"
+    } else {
+      alert(errors.join("\n"))
+    }
+    return
+  }
+
+  // Try server login first; gracefully fall back to local if unavailable
+  serverLogin(email, password)
+    .then((serverUser) => {
+      const effectiveRole = role || serverUser.role || 'citizen'
+      currentUser = { email: serverUser.email, role: effectiveRole, loginTime: new Date().toISOString() }
+      localStorage.setItem("currentUser", JSON.stringify(currentUser))
+      updateAuthUI()
+      hideModal(loginModal)
+      if (errorBox) {
+        errorBox.style.display = "none"
+        errorBox.innerHTML = ""
+      }
+      if (pendingAction) {
+        pendingAction()
+        pendingAction = null
+      }
+      loginForm.reset()
+    })
+    .catch(() => {
+      // Fallback to existing local-only behavior
+      if (email && password && role) {
+        currentUser = {
+          email: email,
+          role: role,
+          loginTime: new Date().toISOString(),
+        }
+        localStorage.setItem("currentUser", JSON.stringify(currentUser))
+        updateAuthUI()
+        hideModal(loginModal)
+        if (errorBox) {
+          errorBox.style.display = "none"
+          errorBox.innerHTML = ""
+        }
+        if (pendingAction) {
+          pendingAction()
+          pendingAction = null
+        }
+        loginForm.reset()
+      }
+    })
 }
 
 function handleLogout() {
-  currentUser = null
-  localStorage.removeItem("currentUser")
-  updateAuthUI()
-  showScreen("landingPage") // Return to landing page on logout
+  // Attempt server logout but do not depend on it
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+    currentUser = null
+    localStorage.removeItem("currentUser")
+    updateAuthUI()
+    showScreen("landingPage") // Return to landing page on logout
+  })
 }
 
 function updateAuthUI() {
@@ -262,7 +313,7 @@ function addSampleHazards() {
 }
 
 // Hazard Reporting
-function handleHazardReport(e) {
+async function handleHazardReport(e) {
   e.preventDefault()
 
   if (!currentUser) {
@@ -275,33 +326,139 @@ function handleHazardReport(e) {
   const severity = document.getElementById("severity").value
   const mediaFile = document.getElementById("mediaUpload").files[0]
 
-  // Get current location
-  if (navigator.geolocation) {
+  // Enforce image with EXIF GPS that matches live location (≤ 1 km)
+  try {
+    if (!mediaFile) throw new Error('Please select an image with EXIF GPS metadata.')
+    const allowed = ['image/jpeg', 'image/jpg']
+    if (!allowed.includes((mediaFile.type || '').toLowerCase())) {
+      throw new Error('Only JPEG images with EXIF GPS are allowed.')
+    }
+    const live = await getLiveLocationStrict()
+    const exifData = await readExifFromFile(mediaFile)
+    const check = compareGeoTagsStrict(live, exifData)
+    if (!check.ok) throw new Error(check.reason || 'Image location validation failed.')
+  } catch (err) {
+    alert(err && err.message ? err.message : 'Image validation failed.')
+    return
+  }
+
+  // If validation passed, submit and use the live location we already obtained
+  // We query once more to place the marker but fall back to previous result if needed
+  let coords
+  try {
+    coords = await getLiveLocationStrict()
+  } catch (_) {
+    // If immediate re-fetch fails, skip placing marker but still accept as validation already succeeded
+    coords = null
+  }
+  const report = {
+    id: Date.now(),
+    type: hazardType,
+    description: description,
+    severity: severity,
+    lat: coords ? coords.lat : undefined,
+    lng: coords ? coords.lng : undefined,
+    timestamp: new Date().toISOString(),
+    reporter: currentUser.email,
+    media: mediaFile ? mediaFile.name : null,
+  }
+  hazardReports.push(report)
+  if (coords) addHazardToMap({ ...report, lat: coords.lat, lng: coords.lng })
+  hideModal(reportModal)
+  hazardForm.reset()
+  alert("Hazard report submitted successfully!")
+}
+
+// ---------- Image geotag validation helpers (vanilla JS) ----------
+function toNumberStrict(value) {
+  if (typeof value === 'number') return value
+  if (value && typeof value.numerator === 'number' && typeof value.denominator === 'number' && value.denominator !== 0) {
+    return value.numerator / value.denominator
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : NaN
+}
+
+function dmsToDecimalStrict(dms, ref) {
+  if (!Array.isArray(dms) || dms.length < 3 || !ref) return null
+  const d = toNumberStrict(dms[0])
+  const m = toNumberStrict(dms[1])
+  const s = toNumberStrict(dms[2])
+  if (![d, m, s].every(Number.isFinite)) return null
+  let dec = d + m / 60 + s / 3600
+  const upper = String(ref).toUpperCase()
+  if (upper === 'S' || upper === 'W') dec = -dec
+  return dec
+}
+
+function haversineKmStrict(a, b) {
+  const R = 6371
+  const dLat = (b.lat - a.lat) * Math.PI / 180
+  const dLng = (b.lng - a.lng) * Math.PI / 180
+  const lat1 = a.lat * Math.PI / 180
+  const lat2 = b.lat * Math.PI / 180
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
+  return R * c
+}
+
+function compareGeoTagsStrict(liveCoords, exifData) {
+  const lat = dmsToDecimalStrict(exifData && exifData.GPSLatitude, exifData && exifData.GPSLatitudeRef)
+  const lng = dmsToDecimalStrict(exifData && exifData.GPSLongitude, exifData && exifData.GPSLongitudeRef)
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { ok: false, reason: 'Image must contain location metadata.' }
+  }
+  const exifCoords = { lat, lng }
+  const distanceKm = haversineKmStrict(liveCoords, exifCoords)
+  if (distanceKm > 1) {
+    return { ok: false, reason: 'Image location does not match your current location.' }
+  }
+  return { ok: true }
+}
+
+function readExifFromFile(file) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!window.EXIF) {
+        reject(new Error('EXIF library not loaded'))
+        return
+      }
+      window.EXIF.getData(file, function () {
+        const data = window.EXIF.getAllTags(this)
+        resolve(data)
+      })
+    } catch (e) {
+      reject(e)
+    }
+  })
+}
+
+async function getLiveLocationStrict() {
+  if (!navigator.geolocation) throw new Error('Location access is required to submit a report.')
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const st = await navigator.permissions.query({ name: 'geolocation' })
+      if (st && st.state === 'denied') throw new Error('Location is blocked for this site. Allow it in Site settings, then reload.')
+    }
+  } catch (_) {}
+  const attempt = (opts) => new Promise((res, rej) => {
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const report = {
-          id: Date.now(),
-          type: hazardType,
-          description: description,
-          severity: severity,
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          timestamp: new Date().toISOString(),
-          reporter: currentUser.email,
-          media: mediaFile ? mediaFile.name : null,
-        }
-
-        hazardReports.push(report)
-        addHazardToMap(report)
-        hideModal(reportModal)
-        hazardForm.reset()
-
-        alert("Hazard report submitted successfully!")
-      },
-      (error) => {
-        alert("Location access required to submit hazard report")
-      },
+      (pos) => res({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => rej(err),
+      opts
     )
+  })
+  try {
+    return await attempt({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+  } catch (e1) {
+    try {
+      return await attempt({ enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 })
+    } catch (e2) {
+      if (e2 && e2.code === 2) throw new Error('Location unavailable. Ensure device location is ON and retry.')
+      if (e2 && e2.code === 3) throw new Error('Location request timed out. Retry.')
+      if (e2 && e2.code === 1) throw new Error('Please allow the location prompt to continue.')
+      throw new Error('Location access is required to submit a report.')
+    }
   }
 }
 
@@ -326,65 +483,88 @@ function addHazardToMap(report) {
 }
 
 // Social Media Feed
-function loadSocialFeed() {
-  const socialFeed = document.getElementById("socialFeed")
-  if (!socialFeed) return
+async function loadSocialFeed() {
+  const container = document.getElementById("socialFeed")
+  if (!container) return
 
-  // Clear existing content
-  socialFeed.innerHTML = ""
+  container.innerHTML = "Loading feed..."
 
-  // Load sample social media posts
-  const samplePosts = [
-    {
-      platform: "twitter",
-      user: "@OceanWatch",
-      content: "Strong rip currents reported at Manhattan Beach. Please exercise caution! #OceanSafety",
-      timestamp: "2 hours ago",
-      location: "Manhattan Beach, CA",
-    },
-    {
-      platform: "instagram",
-      user: "@surfer_dude",
-      content: "Massive waves today! 8-10 footers rolling in. Not for beginners! 🌊",
-      timestamp: "4 hours ago",
-      location: "Malibu, CA",
-    },
-    {
-      platform: "facebook",
-      user: "LA County Lifeguards",
-      content:
-        "Water quality advisory in effect for Santa Monica Bay due to recent rainfall. Avoid water contact for 72 hours.",
-      timestamp: "6 hours ago",
-      location: "Santa Monica Bay",
-    },
-  ]
+  try {
+    const coords = await getUserLocation()
+    const resp = await fetch(`/api/social-feed?lat=${coords.lat}&lng=${coords.lng}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    const posts = (data && data.posts) || []
 
-  samplePosts.forEach((post) => {
-    const postElement = createSocialPostElement(post)
-    socialFeed.appendChild(postElement)
+    if (!posts.length) {
+      container.innerHTML = '<p>No posts found in your area.</p>'
+      return
+    }
+    container.innerHTML = ""
+    posts.forEach((p) => container.appendChild(renderAggregatedPost(p)))
+  } catch (e) {
+    container.innerHTML = `<p>Failed to load feed: ${e.message}</p>`
+  }
+}
+
+function getUserLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      // Default to Chennai if geolocation unavailable
+      resolve({ lat: 13.0827, lng: 80.2707 })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat: 13.0827, lng: 80.2707 }),
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
   })
 }
 
-function createSocialPostElement(post) {
-  const postDiv = document.createElement("div")
-  postDiv.className = "social-post"
+function renderAggregatedPost(p) {
+  const div = document.createElement("div")
+  div.className = "social-post"
+  const mediaHtml = p.media_url
+    ? p.media_type === "video"
+      ? `<video controls style="max-width:100%"><source src="${escapeHtml(p.media_url)}" type="video/mp4"></video>`
+      : `<img src="${escapeHtml(p.media_url)}" alt="media" style="max-width:100%">`
+    : ""
+  const when = p.timestamp ? new Date(p.timestamp).toLocaleString() : ""
+  const platform = (p.platform || '').toString().toLowerCase()
+  div.innerHTML = `
+    <div class="post-header">
+      <div class="platform-icon ${platform}">
+        <i class="fab fa-${platform || 'globe'}"></i>
+      </div>
+      <div>
+        <strong>${escapeHtml(p.username || p.handle || 'User')}</strong>
+        <div style="font-size: 0.9em; color: #666;">${when}</div>
+      </div>
+    </div>
+    <div class="post-content">
+      <p>${linkify(escapeHtml(p.text || p.caption || ''))}</p>
+      ${mediaHtml}
+      ${p.original_url ? `<div style="margin-top:8px"><a href="${escapeAttr(p.original_url)}" target="_blank" rel="noopener noreferrer">View Original</a></div>` : ''}
+    </div>
+  `
+  return div
+}
 
-  postDiv.innerHTML = `
-        <div class="post-header">
-            <div class="platform-icon ${post.platform}">
-                <i class="fab fa-${post.platform}"></i>
-            </div>
-            <div>
-                <strong>${post.user}</strong>
-                <div style="font-size: 0.9em; color: #666;">${post.location} • ${post.timestamp}</div>
-            </div>
-        </div>
-        <div class="post-content">
-            ${post.content}
-        </div>
-    `
+function escapeHtml(s) {
+  const d = document.createElement('div')
+  d.textContent = s
+  return d.innerHTML
+}
 
-  return postDiv
+function escapeAttr(s) {
+  return s.replace(/"/g, '&quot;')
+}
+
+function linkify(s) {
+  return s
+    .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/#(\w+)/g, '<span style="color:#1d4ed8">#$1<\/span>')
 }
 
 // Modal Management
@@ -396,6 +576,36 @@ function hideModal(modal) {
   modal.classList.remove("active")
 }
 
+// -------- Server auth helpers (non-breaking) --------
+async function syncUserFromServer() {
+  try {
+    const resp = await fetch('/api/auth/me', { credentials: 'include' })
+    if (!resp.ok) return
+    const data = await resp.json()
+    if (data && data.success && data.user) {
+      const role = (currentUser && currentUser.role) || data.user.role || 'citizen'
+      currentUser = { email: data.user.email, role: role, loginTime: new Date().toISOString() }
+      localStorage.setItem('currentUser', JSON.stringify(currentUser))
+      updateAuthUI()
+    }
+  } catch (_) {
+    // Ignore; keep existing local behavior
+  }
+}
+
+async function serverLogin(email, password) {
+  const resp = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email, password })
+  })
+  if (!resp.ok) throw new Error('server login failed')
+  const data = await resp.json()
+  if (!data || !data.success || !data.user) throw new Error('bad response')
+  return data.user
+}
+
 // Sample Data Loading
 function loadSampleData() {
   // This would typically load from a server
@@ -403,15 +613,85 @@ function loadSampleData() {
 }
 
 // Filter Functions
-document.getElementById("locationFilter")?.addEventListener("input", (e) => {
-  filterSocialPosts(e.target.value, document.getElementById("platformFilter").value)
+document.getElementById("locationFilter")?.addEventListener("input", async (e) => {
+  // For now just re-run load with current user location; backend already filters by keywords and radius
+  await loadSocialFeed()
 })
 
-document.getElementById("platformFilter")?.addEventListener("change", (e) => {
-  filterSocialPosts(document.getElementById("locationFilter").value, e.target.value)
+document.getElementById("platformFilter")?.addEventListener("change", async (e) => {
+  // Platform-level filtering can be done client-side later; reloading for simplicity
+  await loadSocialFeed()
 })
-
-function filterSocialPosts(location, platform) {
-  // Implementation for filtering social media posts
-  console.log("Filtering posts:", { location, platform })
+async function fetchSocialMediaFeed(platform = 'all', keywords = [], location = null) {
+    // Use unified aggregator endpoint that already returns mock/fallback data
+    const coords = location || await getUserLocation()
+    const platformParam = encodeURIComponent(platform || 'all')
+    const resp = await fetch(`/api/social-feed?platform=${platformParam}&lat=${coords.lat}&lng=${coords.lng}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    let posts = (data && data.posts) ? data.posts.slice() : []
+    if (keywords && keywords.length) {
+        const lowered = keywords.map(k => String(k).toLowerCase()).filter(Boolean)
+        posts = posts.filter(p => {
+            const hay = (p.text || p.caption || '').toLowerCase()
+            return lowered.some(k => hay.includes(k))
+        })
+    }
+    return posts
 }
+
+function renderSocialFeed(posts) {
+    const feed = document.getElementById('socialFeed');
+    feed.innerHTML = '';
+    if (!posts.length) {
+        feed.innerHTML = '<p>No posts found.</p>';
+        return;
+    }
+    posts.forEach(post => {
+        const div = document.createElement('div');
+        div.className = 'social-post';
+        div.innerHTML = `
+            <div class="post-header">
+                <span class="username">${post.username || 'Unknown'}</span>
+                <span class="platform">${post.platform}</span>
+                <span class="date">${new Date(post.created_at).toLocaleString()}</span>
+            </div>
+            <div class="post-content">
+                <p>${post.caption}</p>
+                ${post.media_url ? `<img src="${post.media_url}" alt="Media" style="max-width:100%;">` : ''}
+            </div>
+        `;
+        feed.appendChild(div);
+    });
+}
+
+// Event listeners for filter controls
+document.addEventListener('DOMContentLoaded', () => {
+    const socialCard = document.querySelector('.feature-card[data-feature="social"]');
+    if (socialCard) {
+        socialCard.addEventListener('click', async () => {
+            document.getElementById('landingPage').style.display = 'none';
+            document.getElementById('socialScreen').style.display = 'block';
+            const posts = await fetchSocialMediaFeed('all', ['ocean', 'hazard', 'flood', 'tsunami', 'marine debris']);
+            renderSocialFeed(posts);
+        });
+    }
+
+    document.getElementById('platformFilter').addEventListener('change', async (e) => {
+        const platform = e.target.value;
+        const posts = await fetchSocialMediaFeed(platform, ['ocean', 'hazard', 'flood', 'tsunami', 'marine debris']);
+        renderSocialFeed(posts);
+    });
+
+    document.getElementById('locationFilter').addEventListener('input', async (e) => {
+        // For demo: location filter is not implemented in backend
+        const keyword = e.target.value;
+        const posts = await fetchSocialMediaFeed('all', [keyword]);
+        renderSocialFeed(posts);
+    });
+
+    document.getElementById('backToLandingSocial').addEventListener('click', () => {
+        document.getElementById('socialScreen').style.display = 'none';
+        document.getElementById('landingPage').style.display = 'block';
+    });
+});
